@@ -217,10 +217,8 @@ rt-rw-pengaduan/
 └── vite.config.js                # Konfigurasi Vite (compiler frontend)
 ```
 
-## Kontribusi
-
-Jika Anda ingin berkontribusi pada proyek ini, silakan fork repositori dan kirim pull request.
-
-## Lisensi
-
-Proyek ini bersifat open-source di bawah lisensi MIT License.
+## Kelompok
+1. Rio Firman Raharja (1203230001)
+2. Setiawan Muhammad (1203230016)
+3. Muhammad Afzal (1203230039)
+4. Imam Prasetyo Suherman (1203230043)
