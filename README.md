@@ -73,12 +73,23 @@ Ikuti langkah-langkah di bawah ini untuk menginstal dan menjalankan proyek di li
 4. **Konfigurasi Database di .env**:
    Buka file `.env` dan sesuaikan pengaturan database Anda:
    ```
+   APP_KEY=base64:EAyWMvo9KzcYqdSuzubnlSOhPQV7VjfqTzcPOJInhz0=
+
    DB_CONNECTION=mysql
    DB_HOST=127.0.0.1
    DB_PORT=3306
    DB_DATABASE=pengaduan
    DB_USERNAME=root
    DB_PASSWORD=
+
+   MAIL_MAILER=smtp
+   MAIL_HOST=mailhog
+   MAIL_PORT=1025
+   MAIL_USERNAME=null
+   MAIL_PASSWORD=null
+   MAIL_ENCRYPTION=null
+   MAIL_FROM_ADDRESS="no-reply@pengaduan.local"
+   MAIL_FROM_NAME="${APP_NAME}"
    ```
    Pastikan database `pengaduan` sudah dibuat di MySQL Anda.
 
