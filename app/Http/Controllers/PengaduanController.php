@@ -4,89 +4,216 @@ namespace App\Http\Controllers;
 
 use App\Models\Pengaduan;
 use App\Models\Kategori;
+use App\Models\Pengguna; // Digunakan untuk mencari user RT untuk notifikasi, dll.
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Auth; // Untuk mendapatkan user yang sedang login
+use Illuminate\Support\Facades\Storage; // Untuk menyimpan file lampiran
+use Illuminate\View\View; // Untuk tipe hinting return view()
+use Illuminate\Http\RedirectResponse; // Untuk tipe hinting return redirect()
+
+// Jangan uncomment ini kecuali Anda sudah membuat job SendNotificationEmail
+// use App\Jobs\SendNotificationEmail;
 
 class PengaduanController extends Controller
 {
-    // Menampilkan semua pengaduan milik user login
-    public function index()
+    /**
+     * Konstruktor untuk menerapkan middleware 'auth' ke semua metode di controller ini.
+     * Pengguna harus login untuk mengakses fitur-fitur pengaduan.
+     */
+    public function __construct()
     {
-        $pengaduans = Pengaduan::with('kategori')
-            ->where('user_id', Auth::id())
-            ->latest()
-            ->get();
+        $this->middleware('auth');
+    }
+
+    /**
+     * Menampilkan daftar semua pengaduan.
+     * Tampilan berbeda untuk RT (semua pengaduan) dan Warga (pengaduan mereka sendiri).
+     *
+     * @return View
+     */
+    public function index(): View
+    {
+        // Memuat relasi 'pengguna' dan 'kategori' untuk menghindari N+1 query problem
+        if (Auth::user()->role === 'RT') {
+            // RT dapat melihat semua pengaduan
+            $pengaduans = Pengaduan::with(['pengguna', 'kategori'])->latest()->get();
+        } else { // Warga
+            // Warga hanya dapat melihat pengaduan yang mereka buat
+            $pengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->get();
+        }
 
         return view('pengaduan.index', compact('pengaduans'));
     }
 
-    // Form buat pengaduan baru
-    public function create()
+    /**
+     * Menampilkan formulir untuk membuat pengaduan baru.
+     * Hanya dapat diakses oleh pengguna dengan peran 'warga'.
+     *
+     * @return View
+     */
+    public function create(): View
     {
+        // Verifikasi role: hanya warga yang bisa membuat pengaduan
+        if (Auth::user()->role !== 'warga') {
+            abort(403, 'Akses Ditolak: Hanya warga yang dapat membuat pengaduan.');
+        }
+
+        // Ambil semua kategori untuk dropdown di form
         $kategoris = Kategori::all();
+
         return view('pengaduan.create', compact('kategoris'));
     }
 
-    // Simpan pengaduan baru
-    public function store(Request $request)
+    /**
+     * Menyimpan pengaduan baru ke database.
+     * Hanya dapat diakses oleh pengguna dengan peran 'warga'.
+     *
+     * @param Request $request
+     * @return RedirectResponse
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    public function store(Request $request): RedirectResponse
     {
-        $request->validate([
+        // Verifikasi role: hanya warga yang bisa membuat pengaduan
+        if (Auth::user()->role !== 'warga') {
+            abort(403, 'Akses Ditolak: Hanya warga yang dapat membuat pengaduan.');
+        }
+
+        // Validasi input dari form
+        $validatedData = $request->validate([
             'judul' => 'required|string|max:255',
             'isi' => 'required|string',
-            'kategori_id' => 'required|exists:kategoris,id',
+            'kategori_id' => 'required|exists:kategori,id', // Pastikan kategori_id ada di tabel kategori
+            'lampiran' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048', // Lampiran opsional, hanya gambar, max 2MB
         ]);
 
-        Pengaduan::create([
-            'user_id' => Auth::id(),
-            'judul' => $request->judul,
-            'isi' => $request->isi,
-            'kategori_id' => $request->kategori_id,
-            'status' => 'pending',
-        ]);
+        // Set user_id dari pengguna yang sedang login
+        $validatedData['user_id'] = Auth::id();
 
-        return redirect()->route('pengaduan.index')->with('success', 'Pengaduan berhasil dikirim.');
+        // Penanganan upload file lampiran
+        if ($request->hasFile('lampiran')) {
+            // Simpan file di direktori 'storage/app/public/lampiran_pengaduan'
+            // dan simpan path-nya di database
+            $validatedData['lampiran'] = $request->file('lampiran')->store('lampiran_pengaduan', 'public');
+        }
+
+        // Buat entri pengaduan baru di database
+        $pengaduan = Pengaduan::create($validatedData);
+
+        // Opsional: Dispatch notifikasi ke semua user RT (asynchronous)
+        // Pastikan Anda sudah membuat Job 'SendNotificationEmail' jika ingin menggunakan ini
+        /*
+        $rtUsers = Pengguna::where('role', 'RT')->get();
+        foreach ($rtUsers as $rtUser) {
+            SendNotificationEmail::dispatch($pengaduan, $rtUser, 'new_pengaduan');
+        }
+        */
+
+        return redirect()->route('pengaduan.index')->with('success', 'Pengaduan berhasil dibuat!');
     }
 
-    // Tampilkan detail pengaduan
-    public function show(Pengaduan $pengaduan)
+    /**
+     * Menampilkan detail satu pengaduan beserta komentarnya.
+     * Dapat diakses oleh pembuat pengaduan atau oleh RT.
+     *
+     * @param Pengaduan $pengaduan Model Pengaduan yang diresolve secara otomatis oleh Laravel
+     * @return View
+     */
+    public function show(Pengaduan $pengaduan): View
     {
+        // Verifikasi otorisasi: hanya pembuat atau RT yang bisa melihat detail
+        if (Auth::user()->id !== $pengaduan->user_id && Auth::user()->role !== 'RT') {
+            abort(403, 'Anda tidak memiliki akses untuk melihat pengaduan ini.');
+        }
+
+        // Muat relasi yang diperlukan: komentar beserta penggunanya, pengaduan's pengguna, dan kategori
+        $pengaduan->load(['komentars.pengguna', 'pengguna', 'kategori']);
+
         return view('pengaduan.show', compact('pengaduan'));
     }
 
-    // Edit pengaduan (hanya jika masih pending dan milik user)
-    public function edit(Pengaduan $pengaduan)
+    /**
+     * Menampilkan formulir untuk mengedit pengaduan.
+     * Biasanya hanya dapat diakses oleh pembuat pengaduan atau RT/admin.
+     *
+     * @param Pengaduan $pengaduan
+     * @return View|RedirectResponse
+     */
+    public function edit(Pengaduan $pengaduan): View|RedirectResponse
     {
-        if ($pengaduan->user_id !== Auth::id() || $pengaduan->status !== 'pending') {
-            abort(403);
+        // Contoh otorisasi: hanya pembuat pengaduan yang bisa mengedit, atau RT
+        if (Auth::user()->id !== $pengaduan->user_id && Auth::user()->role !== 'RT') {
+            abort(403, 'Akses Ditolak: Anda tidak memiliki izin untuk mengedit pengaduan ini.');
         }
 
-        $kategoris = Kategori::all();
+        // Jika status sudah diproses atau selesai, mungkin tidak boleh diubah
+        // Kecuali oleh RT
+        if ($pengaduan->status !== 'pending' && Auth::user()->role !== 'RT') {
+            return redirect()->route('pengaduan.show', $pengaduan->id)->with('error', 'Pengaduan tidak bisa diubah karena sudah diproses atau selesai.');
+        }
+
+        $kategoris = Kategori::all(); // Ambil kategori untuk dropdown
+
         return view('pengaduan.edit', compact('pengaduan', 'kategoris'));
     }
 
-    // Update pengaduan (hanya jika masih pending dan milik user)
-    public function update(Request $request, Pengaduan $pengaduan)
+    /**
+     * Memperbarui data pengaduan di database.
+     *
+     * @param Request $request
+     * @param Pengaduan $pengaduan
+     * @return RedirectResponse
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    public function update(Request $request, Pengaduan $pengaduan): RedirectResponse
     {
-        if ($pengaduan->user_id !== Auth::id() || $pengaduan->status !== 'pending') {
-            abort(403);
+        // Contoh otorisasi: hanya pembuat pengaduan yang bisa update, atau RT
+        if (Auth::user()->id !== $pengaduan->user_id && Auth::user()->role !== 'RT') {
+            abort(403, 'Akses Ditolak: Anda tidak memiliki izin untuk memperbarui pengaduan ini.');
         }
 
-        $request->validate([
+        // Validasi input
+        $validatedData = $request->validate([
             'judul' => 'required|string|max:255',
             'isi' => 'required|string',
-            'kategori_id' => 'required|exists:kategoris,id',
+            'kategori_id' => 'required|exists:kategori,id',
+            'lampiran' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $pengaduan->update($request->only('judul', 'isi', 'kategori_id'));
+        // Penanganan upload lampiran baru
+        if ($request->hasFile('lampiran')) {
+            // Hapus lampiran lama jika ada
+            if ($pengaduan->lampiran) {
+                Storage::disk('public')->delete($pengaduan->lampiran);
+            }
+            $validatedData['lampiran'] = $request->file('lampiran')->store('lampiran_pengaduan', 'public');
+        } else {
+            // Jika tidak ada upload baru, pertahankan lampiran lama
+            $validatedData['lampiran'] = $pengaduan->lampiran;
+        }
 
-        return redirect()->route('pengaduan.index')->with('success', 'Pengaduan berhasil diperbarui.');
+        $pengaduan->update($validatedData);
+
+        return redirect()->route('pengaduan.show', $pengaduan->id)->with('success', 'Pengaduan berhasil diperbarui!');
     }
 
-    // Hapus pengaduan (hanya jika masih pending dan milik user)
-    public function destroy(Pengaduan $pengaduan)
+    /**
+     * Menghapus pengaduan dari database.
+     * Biasanya hanya untuk RT/Admin atau pembuat pengaduan.
+     *
+     * @param Pengaduan $pengaduan
+     * @return RedirectResponse
+     */
+    public function destroy(Pengaduan $pengaduan): RedirectResponse
     {
-        if ($pengaduan->user_id !== Auth::id() || $pengaduan->status !== 'pending') {
-            abort(403);
+        // Contoh otorisasi: hanya pembuat pengaduan atau RT yang bisa menghapus
+        if (Auth::user()->id !== $pengaduan->user_id && Auth::user()->role !== 'RT') {
+            abort(403, 'Akses Ditolak: Anda tidak memiliki izin untuk menghapus pengaduan ini.');
+        }
+
+        // Hapus file lampiran jika ada
+        if ($pengaduan->lampiran) {
+            Storage::disk('public')->delete($pengaduan->lampiran);
         }
 
         $pengaduan->delete();
@@ -94,70 +221,94 @@ class PengaduanController extends Controller
         return redirect()->route('pengaduan.index')->with('success', 'Pengaduan berhasil dihapus.');
     }
 
-    // ========== Fitur Admin (RT) ==========
-
-    // Hanya untuk role RT/Admin, menampilkan semua pengaduan lengkap
-public function adminIndex(Request $request)
-{
-    if (!Auth::user()->hasRole('rt')) {
-        abort(403);
-    }
-
-    $query = Pengaduan::with('kategori', 'user')->latest();
-
-    // Filter pencarian keyword
-    if ($request->filled('search')) {
-        $keyword = $request->search;
-        $query->where(function ($q) use ($keyword) {
-            $q->where('judul', 'like', "%$keyword%")
-              ->orWhere('isi', 'like', "%$keyword%")
-              ->orWhereHas('user', function ($q2) use ($keyword) {
-                  $q2->where('name', 'like', "%$keyword%");
-              })
-              ->orWhereHas('kategori', function ($q3) use ($keyword) {
-                  $q3->where('nama', 'like', "%$keyword%");
-              });
-        });
-    }
-
-    // Filter berdasarkan status
-    if ($request->filled('status') && in_array($request->status, ['pending', 'proses', 'selesai'])) {
-        $query->where('status', $request->status);
-    }
-
-    // Filter berdasarkan kategori_id
-    if ($request->filled('kategori_id')) {
-        $query->where('kategori_id', $request->kategori_id);
-    }
-
-    // Filter berdasarkan rentang tanggal (created_at)
-    if ($request->filled('start_date') && $request->filled('end_date')) {
-        $query->whereBetween('created_at', [$request->start_date, $request->end_date]);
-    }
-
-    $pengaduans = $query->get();
-
-    // Untuk select kategori di form filter
-    $kategoris = Kategori::all();
-
-    return view('pengaduan.admin_index', compact('pengaduans', 'kategoris'));
-}
-
-    // Update status pengaduan oleh RT/Admin
-    public function updateStatus(Request $request, $id)
+    /**
+     * Memperbarui status pengaduan (khusus untuk peran 'RT').
+     *
+     * @param Request $request
+     * @param Pengaduan $pengaduan
+     * @return RedirectResponse
+     * @throws \Illuminate\Validation\ValidationException
+     */
+    public function updateStatus(Request $request, Pengaduan $pengaduan): RedirectResponse
     {
-        if (!Auth::user()->hasRole('rt')) {
-            abort(403);
+        // Verifikasi role: hanya RT yang bisa memperbarui status
+        if (Auth::user()->role !== 'RT') {
+            abort(403, 'Akses Ditolak: Hanya RT yang dapat memperbarui status.');
         }
 
-        $request->validate([
+        // Validasi status baru
+        $validatedData = $request->validate([
             'status' => 'required|in:pending,proses,selesai',
         ]);
 
-        $pengaduan = Pengaduan::findOrFail($id);
-        $pengaduan->status = $request->status;
-        $pengaduan->save();
+        $pengaduan->update(['status' => $validatedData['status']]);
 
-        return back()->with('success', 'Status pengaduan berhasil diperbarui.');
+        // Opsional: Dispatch notifikasi ke warga yang membuat pengaduan (asynchronous)
+        // Pastikan Anda sudah membuat Job 'SendNotificationEmail' jika ingin menggunakan ini
+        /*
+        SendNotificationEmail::dispatch($pengaduan, $pengaduan->pengguna, 'status_update');
+        */
+
+        return back()->with('success', 'Status pengaduan berhasil diperbarui!');
+    }
+
+    /**
+     * Menampilkan dashboard khusus untuk pengguna dengan peran 'RT'.
+     *
+     * @return View
+     */
+    public function dashboardRT(): View
+    {
+        // Verifikasi role: hanya RT yang bisa mengakses
+        if (Auth::user()->role !== 'RT') {
+            abort(403, 'Akses Ditolak: Hanya untuk RT.');
+        }
+
+        $totalPengaduan = Pengaduan::count();
+        $pendingPengaduan = Pengaduan::where('status', 'pending')->count();
+        $prosesPengaduan = Pengaduan::where('status', 'proses')->count();
+        $selesaiPengaduan = Pengaduan::where('status', 'selesai')->count();
+
+        $latestPengaduans = Pengaduan::with(['pengguna', 'kategori'])->latest()->limit(5)->get();
+
+        return view('dashboard.rt', compact('totalPengaduan', 'pendingPengaduan', 'prosesPengaduan', 'selesaiPengaduan', 'latestPengaduans'));
+    }
+
+    /**
+     * Menampilkan dashboard khusus untuk pengguna dengan peran 'warga'.
+     *
+     * @return View
+     */
+    public function dashboardWarga(): View
+    {
+        // Verifikasi role: hanya warga yang bisa mengakses
+        if (Auth::user()->role !== 'warga') {
+            abort(403, 'Akses Ditolak: Hanya untuk Warga.');
+        }
+
+        $myTotalPengaduan = Auth::user()->pengaduans()->count();
+        $myPendingPengaduan = Auth::user()->pengaduans()->where('status', 'pending')->count();
+        $myProsesPengaduan = Auth::user()->pengaduans()->where('status', 'proses')->count();
+        $mySelesaiPengaduan = Auth::user()->pengaduans()->where('status', 'selesai')->count();
+
+        // Ambil beberapa pengaduan terbaru yang dibuat oleh warga ini
+        $latestMyPengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->limit(5)->get();
+
+        return view('dashboard.warga', compact('myTotalPengaduan', 'myPendingPengaduan', 'myProsesPengaduan', 'mySelesaiPengaduan', 'latestMyPengaduans'));
+    }
+
+    /**
+     * Menampilkan daftar pengaduan yang dibuat oleh pengguna yang sedang login (warga).
+     *
+     * @return View
+     */
+    public function myPengaduans(): View
+    {
+        // Verifikasi role: hanya warga yang bisa mengakses
+        if (Auth::user()->role !== 'warga') {
+            abort(403, 'Akses Ditolak: Hanya untuk Warga.');
+        }
+        $pengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->get();
+        return view('pengaduan.my_pengaduans', compact('pengaduans'));
     }
 }

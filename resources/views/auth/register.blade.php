@@ -16,26 +16,35 @@
             <x-input-error :messages="$errors->get('email')" class="mt-2" />
         </div>
 
+        <!-- Role Selection -->
+        <div class="mt-4">
+            <x-input-label for="role" :value="__('Daftar Sebagai')" />
+            <select id="role" name="role" class="block mt-1 w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-indigo-500 dark:focus:ring-indigo-600 rounded-md shadow-sm" required>
+                <option value="">Pilih Peran</option>
+                {{-- Anda bisa membatasi opsi di sini sesuai kebutuhan keamanan Anda --}}
+                <option value="warga" {{ old('role') == 'warga' ? 'selected' : '' }}>Warga</option>
+                {{-- Opsional: Hati-hati dengan ini di form publik! --}}
+                <option value="RT" {{ old('role') == 'RT' ? 'selected' : '' }}>Ketua RT</option>
+            </select>
+            <x-input-error :messages="$errors->get('role')" class="mt-2" />
+        </div>
+
         <!-- Password -->
         <div class="mt-4">
             <x-input-label for="password" :value="__('Password')" />
-
             <x-text-input id="password" class="block mt-1 w-full"
                             type="password"
                             name="password"
                             required autocomplete="new-password" />
-
             <x-input-error :messages="$errors->get('password')" class="mt-2" />
         </div>
 
         <!-- Confirm Password -->
         <div class="mt-4">
             <x-input-label for="password_confirmation" :value="__('Confirm Password')" />
-
             <x-text-input id="password_confirmation" class="block mt-1 w-full"
                             type="password"
                             name="password_confirmation" required autocomplete="new-password" />
-
             <x-input-error :messages="$errors->get('password_confirmation')" class="mt-2" />
         </div>
 
@@ -48,13 +57,5 @@
                 {{ __('Register') }}
             </x-primary-button>
         </div>
-        <div>
-    <label for="role">Daftar Sebagai:</label>
-    <select name="role" id="role" required>
-        <option value="warga">Warga</option>
-        <option value="rt">RT</option>
-    </select>
-</div>
-
     </form>
 </x-guest-layout>

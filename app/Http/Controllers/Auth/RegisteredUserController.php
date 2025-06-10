@@ -3,7 +3,8 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Models\Pengguna; // Menggunakan model Pengguna Anda
+use App\Providers\RouteServiceProvider;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,22 +32,22 @@ class RegisteredUserController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'email', 'max:255', 'unique:' . User::class],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.Pengguna::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
-            'role' => ['required', 'string', 'in:warga,rt,admin'],  // validasi role
+            'role' => ['required', 'string', 'in:RT,warga'], // Validasi untuk field role
         ]);
 
-        $user = User::create([
-            'name' => $request->name,
+        $user = Pengguna::create([
+            'nama' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => $request->role,  // simpan role
+            'role' => $request->role, // Menggunakan role yang dipilih dari form
         ]);
 
         event(new Registered($user));
 
         Auth::login($user);
 
-        return redirect(route('dashboard'));
+        return redirect(RouteServiceProvider::HOME);
     }
 }
