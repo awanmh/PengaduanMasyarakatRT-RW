@@ -1,0 +1,154 @@
+rt-rw-pengaduan/
+├── app/
+│   ├── Http/
+│   │   ├── Controllers/
+│   │   │   ├── Auth/             # Controller untuk autentikasi (dari Breeze)
+│   │   │   │   ├── AuthenticatedSessionController.php
+│   │   │   │   ├── ConfirmablePasswordController.php
+│   │   │   │   ├── ConfirmPasswordController.php
+│   │   │   │   ├── EmailVerificationNotificationController.php
+│   │   │   │   ├── EmailVerificationPromptController.php
+│   │   │   │   ├── ForgotPasswordController.php
+│   │   │   │   ├── LoginController.php
+│   │   │   │   ├── NewPasswordController.php
+│   │   │   │   ├── PasswordController.php
+│   │   │   │   ├── PasswordResetLinkController.php
+│   │   │   │   ├── RegisterController.php
+│   │   │   │   ├── RegisteredUserController.php
+│   │   │   │   ├── ResetPasswordController.php
+│   │   │   │   ├── VerificationController.php
+│   │   │   │   └── VerifyEmailController.php
+│   │   │   ├── Controller.php
+│   │   │   ├── HomeController.php
+│   │   │   ├── PengaduanController.php # Controller utama untuk pengaduan
+│   │   │   ├── KategoriController.php  # Controller untuk manajemen kategori
+│   │   │   └── ProfileController.php  # Controller untuk komentar
+│   ├── Middleware/
+│   │   └── RoleMiddleware.php         # Middleware utama
+│   ├── Requests/
+│   │   ├── Auth/                # Folder assets (dibersihkan dengan optimize:resources)              # Folder untuk file i18n dalam bahasa Inggris
+│   │   │   └── ProfileController.php     # File i18n
+│   │   └── ProfileUpdateRequest.php # Request untuk update profile               # Folder assets (dibersihkan dengan optimize:resources)              # Folder untuk file i18n dalam bahasa Inggris
+│   ├── Views/
+│   │   ├── Components/
+│           ├── AppLayout.php # Provider untuk autentikasi # Konfigurasi home route setelah login
+│           └── GuestLayout.php 
+│   ├── Models/
+│   │   ├── Pengguna.php          # Model untuk user (warga/RT)
+│   │   ├── Kategori.php          # Model untuk kategori pengaduan
+│   │   ├── Pengaduan.php         # Model untuk pengaduan
+│   │   └── Komentar.php          # Model untuk komentar pengaduan
+│   └── Providers/
+│       ├── AppServiceProvider.php # Provider untuk autentikasi # Konfigurasi home route setelah login
+│       └── RouteServiceProvider.php # Konfigurasi home route setelah login
+├── bootstrap/
+│   ├── cache/                    # Folder cache aplikasi (dibersihkan dengan optimize:clear)
+│   ├── app.php                    
+│   └── Providers.php                  
+├── config/
+│   ├── app.php                  
+│   ├── auth.php                  # Konfigurasi autentikasi (ubah model ke Pengguna)
+│   ├── cache.php                  
+│   ├── database.php                 
+│   ├── filesystems.php                  
+│   ├── logging.php                 
+│   ├── mail.php                 
+│   ├── queue.php                  
+│   ├── service.php                  
+│   └── session.php                  
+├── database/
+│   ├── factories/
+│   │   ├── KategoriFactory.php                  
+│   │   ├── KomentarFactory.php                  
+│   │   ├── PengaduanFactory.php                  
+│   │   ├── PenggunaFactory.php                  
+│   │   └── UserFactory.php                
+│   ├── migrations/               # File migrasi database
+│   │   ├── 2025_06_10_091016_create_pengguna_table.php
+│   │   ├── 2025_06_10_091022_create_kategori_table.php
+│   │   ├── 2025_06_10_091027_create_pengaduan_table.php
+│   │   ├── 2025_06_10_091034_create_komentar_table.php
+│   │   ├── 2025_06_10_091042_create_cache_table.php
+│   │   ├── 2025_06_10_091050_create_jobs_table.php
+│   │   └── 2025_06_10_092354_create_sessions_table.php
+│   └── seeders/
+│   │   ├── DatabaseSeeder.php                  
+│   │   ├── KategoriSeeder.php                   
+│       └── PenggunaSeeder.php
+├── public/
+│   ├── build/                    # Aset frontend yang dikompilasi (JS/CSS)
+│   └── storage/                  # Symbolic link ke storage/app/public
+├── resources/
+│   ├── css/
+│   │   └── app.css
+│   ├── js/
+│   │   ├── app.js
+│   │   └── bootstrap.js
+│   ├── sass/
+│   │   ├── _variables.scss
+│   │   └── app.scss
+│   ├── views/
+│   │   ├── auth/                 # Tampilan autentikasi (login, register, dll.)
+│   │   │   ├── password/
+│   │   │   │   ├── confirm.blade.php
+│   │   │   │   ├── email.blade.php
+│   │   │   │   └── reset.blade.php
+│   │   │   ├── comfirm-password.blade.php
+│   │   │   ├── forgot-password.blade.php
+│   │   │   ├── login.blade.php
+│   │   │   ├── reset-password.blade.php
+│   │   │   ├── verify-email.blade.php
+│   │   │   ├── verify.blade.php
+│   │   │   └── register.blade.php # View register (tambahkan pilihan role)
+│   │   ├── components/
+│   │   │   ├── application-logo.blade.php
+│   │   │   ├── auth-session-statue.blade.php
+│   │   │   ├── danger-button.blade.php
+│   │   │   ├── dropdown-link.blade.php
+│   │   │   ├── dropdown.blade.php
+│   │   │   ├── input-error.blade.php
+│   │   │   ├── input-label.blade.php
+│   │   │   ├── modal.blade.php
+│   │   │   ├── nav-link.blade.php
+│   │   │   ├── primary-button.blade.php
+│   │   │   ├── responsive-nav-link.blade.php
+│   │   │   ├── secondary-button.blade.php
+│   │   │   └── text-input.blade.php
+│   │   ├── dashboard/            # Tampilan dashboard
+│   │   │   ├── rt.blade.php      # Dashboard Ketua RT
+│   │   │   └── warga.blade.php   # Dashboard Warga
+│   │   ├── kategori/             # Tampilan manajemen kategori
+│   │   │   ├── index.blade.php
+│   │   │   ├── create.blade.php
+│   │   │   └── edit.blade.php
+│   │   ├── layouts/
+│   │   │   ├── guest.blade.php
+│   │   │   ├── navigation.blade.php              
+│   │   │   └── app.blade.php
+│   │   ├── pengaduan/            
+│   │   │   ├── index.blade.php
+│   │   │   ├── my_pengaduans.blade.php
+│   │   │   ├── create.blade.php
+│   │   │   ├── show.blade.php
+│   │   │   └── edit.blade.php
+│   │   ├── profile/
+│   │   │   ├── partials/
+│   │   │   │   ├── delete-user-form.blade.php
+│   │   │   │   ├── update-password-form.blade.php
+│   │   │   │   └── update-profile-information-form.blade.php
+│   │   │   └── edit.blade.php           
+│   │   ├── dashboard.blade.php     
+│   │   ├── home.blade.php     
+│   │   └── welcome.blade.php     # Halaman selamat datang default
+│   └── views/
+├── routes/
+│   ├── auth.php
+│   ├── console.php
+│   └── web.php                   # Definisi rute utama aplikasi
+├── storage/                      # Penyimpanan file (misal: upload lampiran)
+│   └── app/
+│       └── public/               # File yang bisa diakses publik (lampiran pengaduan)
+├── .env                          # Konfigurasi environment lokal
+├── composer.json                 # Konfigurasi dependensi Composer
+├── package.json                  # Konfigurasi dependensi Node.js
+└── vite.config.js                # Konfigurasi Vite (compiler frontend)

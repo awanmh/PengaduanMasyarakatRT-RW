@@ -4,12 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Pengaduan;
 use App\Models\Kategori;
-use App\Models\Pengguna; // Digunakan untuk mencari user RT untuk notifikasi, dll.
+use App\Models\Pengguna;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth; // Untuk mendapatkan user yang sedang login
-use Illuminate\Support\Facades\Storage; // Untuk menyimpan file lampiran
-use Illuminate\View\View; // Untuk tipe hinting return view()
-use Illuminate\Http\RedirectResponse; // Untuk tipe hinting return redirect()
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\View\View;
+use Illuminate\Http\RedirectResponse;
 
 // Jangan uncomment ini kecuali Anda sudah membuat job SendNotificationEmail
 // use App\Jobs\SendNotificationEmail;
@@ -26,20 +26,22 @@ class PengaduanController extends Controller
     }
 
     /**
-     * Menampilkan daftar semua pengaduan.
+     * Menampilkan daftar semua pengaduan dengan pagination.
      * Tampilan berbeda untuk RT (semua pengaduan) dan Warga (pengaduan mereka sendiri).
      *
      * @return View
      */
     public function index(): View
     {
+        $perPage = 15; // Jumlah item per halaman
+        
         // Memuat relasi 'pengguna' dan 'kategori' untuk menghindari N+1 query problem
         if (Auth::user()->role === 'RT') {
             // RT dapat melihat semua pengaduan
-            $pengaduans = Pengaduan::with(['pengguna', 'kategori'])->latest()->get();
+            $pengaduans = Pengaduan::with(['pengguna', 'kategori'])->latest()->paginate($perPage);
         } else { // Warga
             // Warga hanya dapat melihat pengaduan yang mereka buat
-            $pengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->get();
+            $pengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->paginate($perPage);
         }
 
         return view('pengaduan.index', compact('pengaduans'));
@@ -206,12 +208,10 @@ class PengaduanController extends Controller
      */
     public function destroy(Pengaduan $pengaduan): RedirectResponse
     {
-        // Contoh otorisasi: hanya pembuat pengaduan atau RT yang bisa menghapus
         if (Auth::user()->id !== $pengaduan->user_id && Auth::user()->role !== 'RT') {
             abort(403, 'Akses Ditolak: Anda tidak memiliki izin untuk menghapus pengaduan ini.');
         }
 
-        // Hapus file lampiran jika ada
         if ($pengaduan->lampiran) {
             Storage::disk('public')->delete($pengaduan->lampiran);
         }
@@ -231,23 +231,15 @@ class PengaduanController extends Controller
      */
     public function updateStatus(Request $request, Pengaduan $pengaduan): RedirectResponse
     {
-        // Verifikasi role: hanya RT yang bisa memperbarui status
         if (Auth::user()->role !== 'RT') {
             abort(403, 'Akses Ditolak: Hanya RT yang dapat memperbarui status.');
         }
 
-        // Validasi status baru
         $validatedData = $request->validate([
             'status' => 'required|in:pending,proses,selesai',
         ]);
 
         $pengaduan->update(['status' => $validatedData['status']]);
-
-        // Opsional: Dispatch notifikasi ke warga yang membuat pengaduan (asynchronous)
-        // Pastikan Anda sudah membuat Job 'SendNotificationEmail' jika ingin menggunakan ini
-        /*
-        SendNotificationEmail::dispatch($pengaduan, $pengaduan->pengguna, 'status_update');
-        */
 
         return back()->with('success', 'Status pengaduan berhasil diperbarui!');
     }
@@ -259,7 +251,6 @@ class PengaduanController extends Controller
      */
     public function dashboardRT(): View
     {
-        // Verifikasi role: hanya RT yang bisa mengakses
         if (Auth::user()->role !== 'RT') {
             abort(403, 'Akses Ditolak: Hanya untuk RT.');
         }
@@ -269,7 +260,8 @@ class PengaduanController extends Controller
         $prosesPengaduan = Pengaduan::where('status', 'proses')->count();
         $selesaiPengaduan = Pengaduan::where('status', 'selesai')->count();
 
-        $latestPengaduans = Pengaduan::with(['pengguna', 'kategori'])->latest()->limit(5)->get();
+        // Ambil beberapa pengaduan terbaru dengan pagination
+        $latestPengaduans = Pengaduan::with(['pengguna', 'kategori'])->latest()->paginate(5); // 5 per halaman untuk dashboard
 
         return view('dashboard.rt', compact('totalPengaduan', 'pendingPengaduan', 'prosesPengaduan', 'selesaiPengaduan', 'latestPengaduans'));
     }
@@ -281,7 +273,6 @@ class PengaduanController extends Controller
      */
     public function dashboardWarga(): View
     {
-        // Verifikasi role: hanya warga yang bisa mengakses
         if (Auth::user()->role !== 'warga') {
             abort(403, 'Akses Ditolak: Hanya untuk Warga.');
         }
@@ -291,24 +282,23 @@ class PengaduanController extends Controller
         $myProsesPengaduan = Auth::user()->pengaduans()->where('status', 'proses')->count();
         $mySelesaiPengaduan = Auth::user()->pengaduans()->where('status', 'selesai')->count();
 
-        // Ambil beberapa pengaduan terbaru yang dibuat oleh warga ini
-        $latestMyPengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->limit(5)->get();
+        // Ambil beberapa pengaduan terbaru yang dibuat oleh warga ini dengan pagination
+        $latestMyPengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->paginate(5); // 5 per halaman untuk dashboard
 
         return view('dashboard.warga', compact('myTotalPengaduan', 'myPendingPengaduan', 'myProsesPengaduan', 'mySelesaiPengaduan', 'latestMyPengaduans'));
     }
 
     /**
-     * Menampilkan daftar pengaduan yang dibuat oleh pengguna yang sedang login (warga).
+     * Menampilkan daftar pengaduan yang dibuat oleh pengguna yang sedang login (warga) dengan pagination.
      *
      * @return View
      */
     public function myPengaduans(): View
     {
-        // Verifikasi role: hanya warga yang bisa mengakses
         if (Auth::user()->role !== 'warga') {
             abort(403, 'Akses Ditolak: Hanya untuk Warga.');
         }
-        $pengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->get();
+        $pengaduans = Auth::user()->pengaduans()->with('kategori')->latest()->paginate(15); // 15 per halaman
         return view('pengaduan.my_pengaduans', compact('pengaduans'));
     }
 }

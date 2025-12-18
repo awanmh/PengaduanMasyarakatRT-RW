@@ -6,7 +6,6 @@ use App\Http\Controllers\PengaduanController;
 use App\Http\Controllers\KategoriController;
 use App\Http\Controllers\KomentarController;
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Auth; // Tambahkan ini untuk cek autentikasi
 
 /*
 |--------------------------------------------------------------------------
@@ -15,71 +14,40 @@ use Illuminate\Support\Facades\Auth; // Tambahkan ini untuk cek autentikasi
 |
 | Here is where you can register web routes for your application. These
 | routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "web" middleware group. Make something great!
+| be assigned to the "web" middleware group.
 |
 */
 
-// Rute Publik Utama - Arahkan ke Login jika belum autentikasi, ke Dashboard jika sudah.
+// --- Rute Publik ---
+// Halaman selamat datang default, dapat diakses oleh siapa saja.
+// Setelah pengguna login, mereka akan diarahkan ke '/dashboard' secara otomatis
+// oleh konfigurasi Laravel Breeze di RouteServiceProvider.php.
 Route::get('/', function () {
-    if (Auth::check()) {
-        // Jika pengguna sudah login, arahkan ke dashboard utama
-        return redirect()->route('dashboard');
-    }
-    // Jika pengguna belum login, arahkan ke halaman login
-    return redirect()->route('login');
+    return view('welcome');
 });
 
-// Ini adalah rute-rute otentikasi dari Laravel Breeze (login, register, reset password, dll.)
-// Laravel Breeze akan otomatis mengarahkan ke RouteServiceProvider::HOME setelah login.
+// --- Rute Autentikasi ---
+// Rute-rute ini disediakan oleh Laravel Breeze (login, register, reset password, dll.).
+// Tidak perlu diubah, Breeze akan mengelola pengalihan dan keamanan.
 require __DIR__.'/auth.php';
 
-// Rute Terlindungi (Memerlukan pengguna untuk login dan email terverifikasi)
-// Middleware 'auth' dan 'verified' tetap sangat penting di sini untuk semua rute di dalam grup ini.
+
+// --- Rute Terlindungi (Memerlukan Login dan Verifikasi Email) ---
+// Semua rute di dalam grup ini hanya bisa diakses oleh pengguna yang sudah login
+// dan telah memverifikasi alamat email mereka. Middleware 'auth' dan 'verified'
+// akan secara otomatis mengarahkan pengguna yang tidak memenuhi syarat ke halaman yang tepat.
 Route::middleware(['auth', 'verified'])->group(function () {
 
-    // --- Dashboard Umum (Ini adalah rute "/dashboard" yang akan diakses setelah login) ---
-    // Rute ini berfungsi sebagai gerbang untuk mengarahkan pengguna ke dashboard yang sesuai dengan peran mereka.
+    // --- Rute Dashboard Utama ---
+    // Rute ini berfungsi sebagai gerbang untuk mengarahkan pengguna ke dashboard yang sesuai.
+    // Logic pengecekan peran (role) ada di dalam function ini.
     Route::get('/dashboard', function () {
+        // Pengecekan peran pengguna dan pengalihan ke rute dashboard yang spesifik.
         if (Auth::user()->role === 'RT') {
             return redirect()->route('rt.dashboard');
         }
         return redirect()->route('warga.dashboard');
     })->name('dashboard');
-
-    // --- Rute Profil (dari Laravel Breeze) ---
-    // Rute untuk mengelola profil pengguna (edit, update, delete akun)
-    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
-    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-
-
-    // --- Rute RESOURCE PENGADUAN (CRUD: index, create, store, show, edit, update, destroy) ---
-    // Rute ini akan mendaftarkan semua aksi CRUD standar untuk model Pengaduan.
-    // Otoriisasi berdasarkan peran (RT/Warga) akan ditangani DI DALAM PengaduanController.
-    Route::resource('pengaduan', PengaduanController::class);
-
-
-    // --- Rute untuk Menambah Komentar pada Pengaduan ---
-    // Ini adalah rute POST untuk menyimpan komentar baru ke sebuah pengaduan.
-    // Otoriisasi akan ditangani di dalam KomentarController.
-    Route::post('/pengaduan/{pengaduan}/komentar', [KomentarController::class, 'store'])->name('pengaduan.komentar.store');
-
-
-    // --- Rute RESOURCE KATEGORI (CRUD) ---
-    // Otoriisasi akan ditangani di dalam KategoriController (biasanya hanya RT/Admin yang boleh mengelola).
-    Route::resource('kategori', KategoriController::class);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Rute Spesifik Peran (Otorisasi DITANGANI DI CONTROLLER)
-    |--------------------------------------------------------------------------
-    |
-    | Rute di bawah ini sekarang tidak lagi menggunakan middleware 'role' di definisi rute ini.
-    | Sebagai gantinya, masing-masing metode di Controller (contoh: dashboardRT, dashboardWarga)
-    | memiliki logika pengecekan peran di awal metode.
-    |
-    */
 
     // --- Rute Dashboard dan Aksi Khusus untuk Peran 'RT' ---
     Route::get('/dashboard-rt', [PengaduanController::class, 'dashboardRT'])->name('rt.dashboard');
@@ -89,4 +57,43 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // --- Rute Dashboard dan Aksi Khusus untuk Peran 'Warga' ---
     Route::get('/dashboard-warga', [PengaduanController::class, 'dashboardWarga'])->name('warga.dashboard');
     Route::get('/my-pengaduans', [PengaduanController::class, 'myPengaduans'])->name('warga.my_pengaduans');
+
+
+    // --- Rute Manajemen Pengaduan ---
+    // Menggunakan Route::resource untuk mendaftarkan semua rute CRUD standar.
+    // Authorisasi (misal: hanya RT yang bisa update status) akan ditangani di dalam Controller.
+    Route::resource('pengaduan', PengaduanController::class)->names([
+        'index' => 'pengaduan.index',
+        'create' => 'pengaduan.create',
+        'store' => 'pengaduan.store',
+        'show' => 'pengaduan.show',
+        'edit' => 'pengaduan.edit',
+        'update' => 'pengaduan.update',
+        'destroy' => 'pengaduan.destroy',
+    ]);
+
+
+    // --- Rute Komentar ---
+    // Rute POST untuk menyimpan komentar baru pada sebuah pengaduan.
+    Route::post('/pengaduan/{pengaduan}/komentar', [KomentarController::class, 'store'])->name('pengaduan.komentar.store');
+
+
+    // --- Rute Manajemen Kategori ---
+    // Menggunakan Route::resource.
+    // Authorisasi (hanya RT yang bisa mengelola) akan ditangani di dalam Controller.
+    Route::resource('kategori', KategoriController::class)->names([
+        'index' => 'kategori.index',
+        'create' => 'kategori.create',
+        'store' => 'kategori.store',
+        'show' => 'kategori.show',
+        'edit' => 'kategori.edit',
+        'update' => 'kategori.update',
+        'destroy' => 'kategori.destroy',
+    ]);
+
+
+    // --- Rute Profil (dari Laravel Breeze) ---
+    Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
